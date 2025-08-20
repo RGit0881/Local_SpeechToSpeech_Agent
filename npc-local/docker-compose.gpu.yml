@@ -1,0 +1,16 @@
+services:
+  ollama:
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities:
+          - gpu
+
+  server:
+    device_requests:
+      - driver: nvidia
+        count: all
+        capabilities:
+          - gpu
+    environment:
+      - WHISPER_COMPUTE_OVERRIDE=float16   # lets our entrypoint prefer float16 when GPU is present

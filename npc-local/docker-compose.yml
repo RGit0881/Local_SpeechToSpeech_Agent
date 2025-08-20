@@ -1,0 +1,36 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    ports: ["11434:11434"]
+    volumes: [ollama:/root/.ollama]
+    restart: unless-stopped
+
+  server:
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+    container_name: npc-voice-server
+    depends_on: [ollama]
+    environment:
+      - OLLAMA_URL=http://ollama:11434
+      - LLM_MODEL=gpt-oss:20b
+      - CONTEXT_TOKENS=8192
+      - LLM_MAX_TOKENS=120
+      - LLM_THREADS=0
+      - WHISPER_SIZE=small
+      - TTS_LANGUAGE=en
+      - TTS_GLOBAL_RATE=1.0
+      - HF_HOME=/data/hf
+      - XDG_CACHE_HOME=/data/.cache
+      - TTS_HOME=/data/tts
+      - COQUI_TOS_AGREED=1
+    volumes:
+      - serverdata:/data
+      - ./server/voices:/app/voices
+    ports: ["8000:8000"]
+    restart: unless-stopped
+
+volumes:
+  ollama:
+  serverdata:
