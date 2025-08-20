@@ -1,3 +1,5 @@
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 <Reza Jari>
 #!/usr/bin/env bash
 set -e
 

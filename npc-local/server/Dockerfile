@@ -1,3 +1,7 @@
+
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 <Reza Jari>
+
 FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
 
 # System deps

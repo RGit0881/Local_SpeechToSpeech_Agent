@@ -1,4 +1,5 @@
 # npc-local — Local AI NPC Server (STT → LLM → TTS)
+© 2025 Reza jari. Code licensed under MIT. Third-party models/assets retain their own licenses.
 
 A self-hosted voice NPC pipeline for games/prototypes. Each teammate runs it locally (no cloud costs).  
 You speak in (WAV) → Whisper transcribes → LLM replies (Ollama) → Coqui TTS speaks back (XTTS v2).

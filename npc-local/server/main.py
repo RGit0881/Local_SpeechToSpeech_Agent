@@ -1,4 +1,6 @@
-# server/main.py
+# SPDX-License-Identifier: MIT
+# Copyright (c) 2025 <Reza Jari>
+# # server/main.py
 import os, io, re, base64, tempfile, shutil, datetime
 from typing import List, Dict, Optional, Tuple
 
