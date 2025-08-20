@@ -1,0 +1,401 @@
+<!doctype html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Local NPCs</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style>
+      body { font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif; max-width: 1000px; margin: auto; padding: 24px; }
+      h2 { margin-top: 28px; }
+      form > div { margin: 8px 0; }
+      input[type="text"], textarea { width: 100%; padding: 8px; }
+      .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+      .card { border: 1px solid #ddd; border-radius: 8px; padding: 12px; margin: 8px 0; }
+      .actions { display: flex; gap: 8px; flex-wrap: wrap; }
+      button { padding: 8px 12px; }
+      code, pre { background: #f6f6f6; padding: 8px; border-radius: 6px; overflow:auto; }
+      .muted { color: #777; }
+      .danger { color: #c00; }
+      .ok { color: #0a0; }
+      .copy { float:right; margin-left:8px; cursor:pointer; font-size:12px; }
+      .grid3 { display:grid; grid-template-columns: 1fr 1fr 1fr; gap:12px; }
+      @media (max-width: 900px) { .row, .grid3 { grid-template-columns: 1fr; } }
+    </style>
+  </head>
+  <body>
+    <h1>Local NPC Manager</h1>
+
+    <!-- Create -->
+    <h2>Create NPC</h2>
+    <form id="createForm" class="card">
+      <div class="row">
+        <div><label>Name <input name="name" required /></label></div>
+        <div><label>Language <input name="language" value="en" /></label></div>
+      </div>
+      <div><label>Tone <input name="tone" placeholder="sarcastic, terse, noir" /></label></div>
+      <div><label>Persona/System Prompt<br>
+        <textarea name="persona" rows="5" required>You are Mira, a cyberpunk bartender. Be witty, brief, streetwise.</textarea></label>
+      </div>
+      <div class="row">
+        <div><label>Voice sample (upload) <input type="file" name="voice_wav" accept="audio/*" /></label></div>
+        <div><label>…or library filename (voice_ref) <input name="voice_ref" placeholder="hero.wav" /></label></div>
+      </div>
+      <div><label><input type="checkbox" name="issue_api_key" value="1" /> Issue API key</label></div>
+      <div class="actions">
+        <button>Create</button>
+        <span id="createOut" class="muted"></span>
+      </div>
+    </form>
+
+    <!-- List -->
+    <h2>Your NPCs</h2>
+    <div id="list"></div>
+
+    <!-- Edit -->
+    <h2>Edit NPC</h2>
+    <form id="editForm" class="card" hidden>
+      <input type="hidden" name="id" />
+      <div class="row">
+        <div><label>Name <input name="name" /></label></div>
+        <div><label>Language <input name="language" /></label></div>
+      </div>
+      <div><label>Tone <input name="tone" placeholder="sarcastic, terse, noir" /></label></div>
+      <div><label>Persona/System Prompt<br>
+        <textarea name="persona" rows="5"></textarea></label>
+      </div>
+      <div class="row">
+        <div><label>Replace voice (upload) <input type="file" name="voice_wav" accept="audio/*" /></label></div>
+        <div><label>…or set voice_ref <input name="voice_ref" placeholder="hero.wav" /></label></div>
+      </div>
+
+      <div class="row">
+        <div><label>API Key (stored locally) <input name="api_key" placeholder="paste current NPC api key here" /></label></div>
+        <div class="actions">
+          <button id="saveBtn" type="submit">Save</button>
+          <button id="rotateBtn" type="button">Rotate API key</button>
+          <button id="deleteBtn" type="button" class="danger">Delete NPC</button>
+        </div>
+      </div>
+      <div id="editOut" class="muted"></div>
+    </form>
+
+    <!-- Quick test -->
+    <h2>Quick Test (STT → LLM → TTS)</h2>
+    <form id="testForm" class="card" hidden>
+      <div class="row">
+        <div><label>Session ID <input name="session_id" value="dev1" /></label></div>
+        <div><label>Language <input name="lang" value="en" /></label></div>
+      </div>
+      <div><label>Audio input <input type="file" name="file" accept="audio/*" /></label></div>
+      <div class="actions">
+        <button>Send</button>
+        <span id="testOut"></span>
+      </div>
+      <audio id="testAudio" controls></audio>
+    </form>
+
+    <!-- Developer Endpoints -->
+    <h2>Developer Endpoints</h2>
+    <div id="dev" class="card" hidden>
+      <div id="devMeta" class="muted"></div>
+      <h3>Endpoints</h3>
+      <ul id="devEndpoints"></ul>
+
+      <div class="grid3">
+        <div>
+          <h3>Bash / macOS / Linux
+            <button class="copy" data-copy="#bashExample">Copy</button>
+          </h3>
+          <pre id="bashExample"></pre>
+        </div>
+        <div>
+          <h3>PowerShell (Windows)
+            <button class="copy" data-copy="#psExample">Copy</button>
+          </h3>
+          <pre id="psExample"></pre>
+        </div>
+        <div>
+          <h3>JavaScript (fetch)
+            <button class="copy" data-copy="#jsExample">Copy</button>
+          </h3>
+          <pre id="jsExample"></pre>
+        </div>
+      </div>
+
+      <h3>Response Shapes</h3>
+      <pre>{
+  "transcript": "string",
+  "reply_text": "string",
+  "audio_b64": "base64 WAV"
+}
+# /reply.wav returns the WAV bytes directly (audio/wav)
+</pre>
+    </div>
+
+    <script>
+      const $ = (sel) => document.querySelector(sel);
+      const listEl = $("#list");
+      const createOut = $("#createOut");
+      const editForm = $("#editForm");
+      const testForm = $("#testForm");
+      const editOut = $("#editOut");
+      const testOut = $("#testOut");
+      const testAudio = $("#testAudio");
+
+      const devCard = $("#dev");
+      const devMeta = $("#devMeta");
+      const devEndpoints = $("#devEndpoints");
+      const bashExample = $("#bashExample");
+      const psExample = $("#psExample");
+      const jsExample = $("#jsExample");
+
+      // --- Helpers ---
+      const apiKeyFor = (id) => localStorage.getItem("npc:key:" + id) || "";
+      const setApiKeyFor = (id, key) => localStorage.setItem("npc:key:" + id, key || "");
+
+      async function json(url) {
+        const r = await fetch(url);
+        if (!r.ok) throw new Error(await r.text());
+        return r.json();
+      }
+      function withApiKey(id, init={}) {
+        const k = apiKeyFor(id);
+        init.headers = init.headers || {};
+        if (k) init.headers["X-API-Key"] = k;
+        return init;
+      }
+      function copyFromSelector(sel) {
+        const el = document.querySelector(sel);
+        const txt = el?.innerText || "";
+        navigator.clipboard.writeText(txt);
+      }
+      document.addEventListener("click", (e) => {
+        const btn = e.target.closest(".copy");
+        if (!btn) return;
+        const sel = btn.getAttribute("data-copy");
+        copyFromSelector(sel);
+        btn.textContent = "Copied!";
+        setTimeout(() => (btn.textContent = "Copy"), 1200);
+      });
+
+      async function refreshList() {
+        listEl.innerHTML = "Loading…";
+        const rows = await json("/npcs");
+        if (!rows.length) { listEl.textContent = "No NPCs yet."; return; }
+        listEl.innerHTML = "";
+        for (const r of rows) {
+          const card = document.createElement("div");
+          card.className = "card";
+          card.innerHTML = `
+            <div class="row">
+              <div><b>${r.name}</b> <span class="muted">#${r.id}</span></div>
+              <div class="muted">${r.slug}</div>
+            </div>
+            <div class="actions">
+              <button data-id="${r.id}" class="loadBtn">Edit</button>
+              <button data-id="${r.id}" class="danger delBtn">Delete</button>
+              <span class="muted">${r.api_key ? "API key required" : "No API key"}</span>
+            </div>`;
+          listEl.appendChild(card);
+        }
+        listEl.querySelectorAll(".loadBtn").forEach(btn => btn.onclick = () => loadNpc(btn.dataset.id));
+        listEl.querySelectorAll(".delBtn").forEach(btn => btn.onclick = () => deleteNpc(btn.dataset.id));
+      }
+
+      async function loadNpc(id) {
+        const npc = await json(`/npcs/${id}`);
+        editForm.hidden = false;
+        testForm.hidden = false;
+        devCard.hidden = false;
+
+        editForm.id.value = npc.id;
+        editForm.name.value = npc.name || "";
+        editForm.language.value = npc.language || "en";
+        editForm.tone.value = npc.tone || "";
+        editForm.persona.value = npc.persona || "";
+        editForm.voice_ref.value = npc.voice_ref || "";
+        editForm.api_key.value = apiKeyFor(npc.id); // local only
+        editOut.textContent = `Loaded NPC #${npc.id}. Voice: ${npc.voice_path || npc.voice_ref || "none"}`;
+
+        renderDevExamples(npc);
+      }
+
+      function renderDevExamples(npc) {
+        const origin = location.origin;
+        const base   = `${origin}/npcs/${npc.id}`;
+        const histQ  = `${base}/history?session_id=YOUR_SESSION_ID`;
+        const apiKey = apiKeyFor(npc.id);
+        const sessId = testForm.session_id?.value || "dev1";
+        const lang   = testForm.lang?.value || "en";
+
+        devMeta.innerHTML = `
+          <b>NPC:</b> ${npc.name} <span class="muted">#${npc.id}</span><br/>
+          <b>Auth:</b> ${apiKey ? 'Send header <code>X-API-Key: ' + apiKey + '</code>' : 'No API key required'}<br/>
+          <b>Session:</b> Use any string (e.g. <code>${sessId}</code>) to scope a conversation thread.
+        `;
+
+        devEndpoints.innerHTML = `
+          <li><code>POST ${base}/reply</code> – multipart/form-data → JSON (transcript, reply_text, audio_b64)</li>
+          <li><code>POST ${base}/reply.wav</code> – multipart/form-data → audio/wav</li>
+          <li><code>GET  ${histQ}</code> – list message history for a session</li>
+        `;
+
+        const hdrBash = apiKey ? `-H "X-API-Key: ${apiKey}" ` : "";
+        bashExample.textContent =
+`# JSON reply
+curl ${hdrBash}\\
+  -F "session_id=${sessId}" \\
+  -F "lang=${lang}" \\
+  -F "file=@sample.wav;type=audio/wav" \\
+  "${base}/reply"
+
+# Direct WAV
+curl ${hdrBash}\\
+  -F "session_id=${sessId}" \\
+  -F "lang=${lang}" \\
+  -F "file=@sample.wav;type=audio/wav" \\
+  "${base}/reply.wav" -o npc_reply.wav
+
+# History
+curl ${hdrBash}"${base}/history?session_id=${sessId}"
+`;
+
+        const hdrPS = apiKey ? `-H ("X-API-Key: {0}" -f $apiKey)` : "";
+        psExample.textContent =
+`$npcId  = ${npc.id}
+$apiKey = "${apiKey}"
+$inWav  = "C:\\\\path\\\\to\\\\sample.wav"
+
+# JSON reply
+curl.exe ${hdrPS} \`
+  -F "session_id=${sessId}" \`
+  -F "lang=${lang}" \`
+  -F ("file=@{0};type=audio/wav" -f (Resolve-Path $inWav).Path) \`
+  ("${base}/reply") -o reply.json
+
+$resp = Get-Content .\\reply.json -Raw | ConvertFrom-Json
+$resp.reply_text
+[IO.File]::WriteAllBytes("npc_reply.wav",[Convert]::FromBase64String($resp.audio_b64))
+
+# Direct WAV
+curl.exe ${hdrPS} \`
+  -F "session_id=${sessId}" \`
+  -F "lang=${lang}" \`
+  -F ("file=@{0};type=audio/wav" -f (Resolve-Path $inWav).Path) \`
+  ("${base}/reply.wav") -o npc_reply.wav
+
+# History
+curl.exe ${hdrPS} "${base}/history?session_id=${sessId}"
+`;
+
+        const hdrJS = apiKey ? `, headers: { "X-API-Key": "${apiKey}" }` : "";
+        jsExample.textContent =
+`// JSON reply
+const fd = new FormData();
+fd.append("session_id","${sessId}");
+fd.append("lang","${lang}");
+fd.append("file", fileInput.files[0]); // <input type="file" id="fileInput" />
+
+const r = await fetch("${base}/reply", { method: "POST"${hdrJS}, body: fd });
+const data = await r.json();
+const wavBytes = Uint8Array.from(atob(data.audio_b64), c => c.charCodeAt(0));
+const blob = new Blob([wavBytes], { type: "audio/wav" });
+audio.src = URL.createObjectURL(blob);
+
+// Direct WAV
+const r2 = await fetch("${base}/reply.wav", { method: "POST"${hdrJS}, body: fd });
+const blob2 = await r2.blob();
+audio.src = URL.createObjectURL(blob2);
+
+// History
+const r3 = await fetch("${base}/history?session_id=${sessId}"${hdrJS ? `, { headers: { "X-API-Key": "${apiKey}" } }` : ""});
+const hist = await r3.json();
+`;
+
+      }
+
+      async function deleteNpc(id) {
+        const key = apiKeyFor(id) || prompt("Enter API key for NPC #" + id + " (required to delete):") || "";
+        setApiKeyFor(id, key);
+        if (!confirm("Really delete NPC #" + id + "?")) return;
+        const r = await fetch(`/npcs/${id}`, withApiKey(id, { method: "DELETE" }));
+        if (!r.ok) { alert("Delete failed: " + await r.text()); return; }
+        editForm.reset(); editForm.hidden = true; testForm.hidden = true; devCard.hidden = true;
+        await refreshList();
+        alert("Deleted.");
+      }
+
+      // --- Create ---
+      $("#createForm").onsubmit = async (e) => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        if (!(fd.get("voice_wav") && fd.get("voice_wav").size) && !fd.get("voice_ref")) {
+          alert("Provide a voice_wav or a voice_ref"); return;
+        }
+        createOut.textContent = "Creating…";
+        const r = await fetch("/npcs", { method: "POST", body: fd });
+        const txt = await r.text();
+        createOut.textContent = r.ok ? "Created." : "Error: " + txt;
+        try {
+          const js = JSON.parse(txt);
+          if (js.api_key) setApiKeyFor(js.id, js.api_key);
+        } catch {}
+        await refreshList();
+      };
+
+      // --- Edit/Save ---
+      editForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const id = editForm.id.value;
+        const fd = new FormData();
+        if (editForm.name.value) fd.append("name", editForm.name.value);
+        if (editForm.language.value) fd.append("language", editForm.language.value);
+        if (editForm.tone.value || editForm.tone.value === "") fd.append("tone", editForm.tone.value);
+        if (editForm.persona.value || editForm.persona.value === "") fd.append("persona", editForm.persona.value);
+        if (editForm.voice_ref.value) fd.append("voice_ref", editForm.voice_ref.value);
+        if (editForm.voice_wav.files[0]) fd.append("voice_wav", editForm.voice_wav.files[0]);
+
+        setApiKeyFor(id, editForm.api_key.value.trim());
+        editOut.textContent = "Saving…";
+        const r = await fetch(`/npcs/${id}`, withApiKey(id, { method: "PATCH", body: fd }));
+        const txt = await r.text();
+        editOut.innerHTML = r.ok ? `<span class="ok">Saved.</span>` : `<span class="danger">Error:</span> ${txt}`;
+        refreshList();
+      };
+
+      $("#rotateBtn").onclick = async () => {
+        const id = editForm.id.value;
+        const fd = new FormData(); fd.append("rotate_api_key", "1");
+        const r = await fetch(`/npcs/${id}`, withApiKey(id, { method: "PATCH", body: fd }));
+        const js = await r.json().catch(() => ({}));
+        if (r.ok && js.api_key) {
+          setApiKeyFor(id, js.api_key);
+          editForm.api_key.value = js.api_key;
+          editOut.textContent = "API key rotated.";
+          renderDevExamples(await json(`/npcs/${id}`));
+        } else {
+          editOut.textContent = "Failed to rotate key: " + (await r.text());
+        }
+      };
+
+      // --- Quick Test (wired to dev examples session/lang) ---
+      testForm.onsubmit = async (e) => {
+        e.preventDefault();
+        const id = editForm.id.value;
+        const fd = new FormData(testForm);
+        const r = await fetch(`/npcs/${id}/reply.wav`, withApiKey(id, { method: "POST", body: fd }));
+        if (!r.ok) { testOut.textContent = "Error: " + await r.text(); return; }
+        const blob = await r.blob();
+        testAudio.src = URL.createObjectURL(blob);
+        testOut.textContent = "OK";
+      };
+      testForm.addEventListener("input", () => {
+        const id = editForm.id.value;
+        if (id) json(`/npcs/${id}`).then(renderDevExamples).catch(()=>{});
+      });
+
+      // boot
+      refreshList();
+    </script>
+  </body>
+</html>

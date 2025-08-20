@@ -7,3 +7,5 @@ TTS==0.22.0
 soundfile==0.12.1
 numpy==1.22.0
 requests==2.32.3
+SQLAlchemy==2.0.32
+python-slugify==8.0.4

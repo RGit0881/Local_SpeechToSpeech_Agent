@@ -16,8 +16,9 @@ services:
       - OLLAMA_URL=http://ollama:11434
       - LLM_MODEL=gpt-oss:20b
       - CONTEXT_TOKENS=8192
-      - LLM_MAX_TOKENS=120
+      - LLM_MAX_TOKENS=300
       - LLM_THREADS=0
+      - LLM_TEMPERATURE=0.7
       - WHISPER_SIZE=small
       - TTS_LANGUAGE=en
       - TTS_GLOBAL_RATE=1.0
@@ -25,9 +26,13 @@ services:
       - XDG_CACHE_HOME=/data/.cache
       - TTS_HOME=/data/tts
       - COQUI_TOS_AGREED=1
+      - DB_PATH=/data/npcs.db
+      - VOICES_STORAGE=/data/voices
+      - VOICES_DIR=/app/voices
+      - LLM_KEEP_ALIVE=-1
     volumes:
       - serverdata:/data
-      - ./server/voices:/app/voices
+      - ${NPC_VOICES:-./server/voices}:/app/voices:rw
     ports: ["8000:8000"]
     restart: unless-stopped
 
