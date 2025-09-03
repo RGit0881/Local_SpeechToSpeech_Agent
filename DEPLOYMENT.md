@@ -49,7 +49,7 @@ docker compose down -v
 ```bash
 docker compose up -d --build
 # tail server logs
-docker compose logs -f npc-voice-server
+docker compose logs -f server
 # tail ollama logs
 docker compose logs -f ollama
 ```
